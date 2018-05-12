@@ -5,7 +5,9 @@
 
 
 #define TAM_HASH 30
-
+#define COEF_REDIM 2
+#define CANT_MAX 3/4
+#define CANT_MIN 1/4
 
 typedef enum{VACIO,OCUPADO,BORRADO}estado_t;
 
@@ -119,17 +121,13 @@ hash_t *hash_crear(hash_destruir_dato_t destruir_dato){
 
 
 bool hash_guardar(hash_t* hash, const char* clave, void *dato){
-
-	if(hash->cant >= hash->cap*3/4){
-		resize_hash(hash,hash->cap*2);
-	}
+	//Si la cantidad esta en 3/4 del total que se duplique el tamanio
+	if(hash->cant >= hash->cap*CANT_MAX) resize_hash(hash,hash->cap*COEF_REDIM);
 
 	size_t pos=jenkins_one_at_a_time_hash(clave,hash->cap);
 	//me fijo si la clave existe
 	if(hash_pertenece(hash,clave)){
-		if(hash->destruir_dato){
-			hash->destruir_dato(hash->tabla[pos]->dato);
-		}
+		if(hash->destruir_dato) hash->destruir_dato(hash->tabla[pos]->dato);
 		hash->tabla[pos]->dato=dato;
 	}
 	else{
@@ -154,9 +152,9 @@ bool hash_guardar(hash_t* hash, const char* clave, void *dato){
 
 
 void *hash_borrar(hash_t *hash, const char *clave){
-	//mirar redimension
-	if(hash->cant < hash->cap/4 && hash->cap/2 >= TAM_HASH){
-		if(!resize_hash(hash,hash->cap/2)) return NULL;
+	//si la cantidad de elementos del hash es < a 1/4 de su tamanio que redimensione a la mitad
+	if(hash->cant < hash->cap*CANT_MIN){
+		if(!resize_hash(hash,hash->cap/COEF_REDIM)) return NULL;
 	}
 
 
