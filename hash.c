@@ -119,8 +119,6 @@ hash_t *hash_crear(hash_destruir_dato_t destruir_dato){
 
 
 bool hash_guardar(hash_t* hash, const char* clave, void *dato){
-	char* clave_aux = strdup(clave);
-	if (!clave_aux) return false;
 
 	if(hash->cant >= hash->cap*3/4){
 		resize_hash(hash,hash->cap*2);
@@ -135,19 +133,21 @@ bool hash_guardar(hash_t* hash, const char* clave, void *dato){
 		hash->tabla[pos]->dato=dato;
 	}
 	else{
-		while(true){
+		size_t i=0;
+		while(i<hash->cap){
+			if(pos+1==hash->cap) pos=0;
 			if(hash->tabla[pos]->estado!=OCUPADO){
-				hash->tabla[pos]->estado = OCUPADO;
-				hash->tabla[pos]->clave = clave_aux;
-				hash->tabla[pos]->dato = dato;
-				hash->cant ++;
+				hash->tabla[pos]->estado=OCUPADO;
+				hash->tabla[pos]->clave=strdup(clave);
+				hash->tabla[pos]->dato=dato;
+				hash->cant++;
 				break;
 			}
 			else{
-				pos++;
-				if(pos+1==hash->cap) pos=0;
+				i++,pos++;
 			}
 		}
+
 	}
 	return true;
 }
@@ -223,6 +223,7 @@ void hash_destruir(hash_t* hash){
 	free(hash);
 }
 
+
 hash_iter_t *hash_iter_crear(const hash_t *hash){
 	hash_iter_t* iter = malloc(sizeof(hash_iter_t));
 	if(!iter) return NULL;
@@ -232,14 +233,17 @@ hash_iter_t *hash_iter_crear(const hash_t *hash){
 	if(iter->hash->cant==0){
 		iter->pos = hash->cap;
 	}
-	else{//busco el primer ocupado
-		while(iter->hash->tabla[i]->estado!=OCUPADO && i<iter->hash->cap){
+	while(i!=iter->hash->cap)
+		if(iter->hash->tabla[i]->estado==OCUPADO){
+			iter->pos=i;
+			break;
+		}
+		else{
 			i++;
 		}
-		iter->pos=i;
-	}
 	return iter;
 }
+
 
 bool hash_iter_al_final(const hash_iter_t *iter){
 	return (iter->pos==iter->hash->cap);
