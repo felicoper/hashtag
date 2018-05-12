@@ -27,6 +27,8 @@ struct hash_iter{
 	size_t pos;
 };
 
+
+
 size_t jenkins_one_at_a_time_hash(const char* clave, size_t hash_cap) {
   size_t i = 0;
   size_t hash = 0;
@@ -55,6 +57,45 @@ nodo_t* crear_nodo(){
 	return nodo;
 }
 
+bool resize_hash(hash_t* hash,size_t nuevo_tam){
+	//creo tabla nueva 
+	nodo_t** nueva_tabla=malloc(sizeof(nodo_t)*nuevo_tam);
+	if(!nueva_tabla)	return false;
+	for(size_t i=0;i<nuevo_tam;i++){
+		nodo_t* nodo=crear_nodo();
+		if(!nodo) return false;
+		nueva_tabla[i]=nodo;
+	}
+
+	//recorro el hash viejo buscando solo los ocupados y los rehasheo a la tabla nueva
+	for(size_t i=0;i<hash->cap;i++){
+		if(hash->tabla[i]->estado==OCUPADO){
+			const char* clave = strdup(hash->tabla[i]->clave);
+			size_t pos = jenkins_one_at_a_time_hash(clave,nuevo_tam);
+			//me fijo si la nueva posicion esta ocupada o no y guardo el elemento;
+			while(true){
+				if(pos+1==nuevo_tam) pos=0;
+				if(nueva_tabla[pos]->estado==VACIO){
+					nueva_tabla[pos]->estado=OCUPADO;
+					nueva_tabla[pos]->clave=clave;
+					nueva_tabla[pos]->dato=hash->tabla[i]->dato;
+					break;
+				}
+				else{
+					pos++;
+				}
+			}
+		}
+			free((char*)hash->tabla[i]->clave);
+		free(hash->tabla[i]);
+	}
+	nodo_t** tabla_previa = hash->tabla;
+	hash->tabla = nueva_tabla;
+	hash->cap=nuevo_tam;
+	free(tabla_previa);
+	return true;
+}
+
 hash_t *hash_crear(hash_destruir_dato_t destruir_dato){
 	hash_t* hash = malloc(sizeof(hash_t));
 	if(!hash) return NULL;
@@ -78,9 +119,12 @@ hash_t *hash_crear(hash_destruir_dato_t destruir_dato){
 
 
 bool hash_guardar(hash_t* hash, const char* clave, void *dato){
-	char* clave_aux = malloc(sizeof(char)*strlen(clave));
+	char* clave_aux = strdup(clave);
 	if (!clave_aux) return false;
-	strcpy(clave_aux,clave);
+
+	if(hash->cant >= hash->cap*3/4){
+		resize_hash(hash,hash->cap*2);
+	}
 
 	size_t pos=jenkins_one_at_a_time_hash(clave,hash->cap);
 	//me fijo si la clave existe
@@ -111,18 +155,24 @@ bool hash_guardar(hash_t* hash, const char* clave, void *dato){
 
 void *hash_borrar(hash_t *hash, const char *clave){
 	//mirar redimension
-	if(hash->cant==0) return NULL;
+	if(hash->cant < hash->cap/4 && hash->cap/2 >= TAM_HASH){
+		if(!resize_hash(hash,hash->cap/2)) return NULL;
+	}
+
+
+	if(hash_esta_vacio(hash)) return NULL;
 	size_t pos=jenkins_one_at_a_time_hash(clave,hash->cap);
 	void* dato = NULL;
 	//busco la clave y me fijo si existe
 	size_t i=0;
-	while(hash->tabla[pos+i]!=VACIO){
-		if(i==hash->cap) return dato;
+	while(hash->tabla[pos+i]->estado==OCUPADO && i<hash->cap){
+		
 		if(strcmp(hash->tabla[pos+i]->clave,clave)==0){
 			dato=hash->tabla[pos]->dato;
 			hash->tabla[pos]->dato=NULL;
 			hash->tabla[pos]->estado=BORRADO;
 			hash->cant--;
+			break;
 		}
 		else{
 			pos++,i++;
@@ -141,12 +191,12 @@ void *hash_obtener(const hash_t *hash, const char *clave){
 	size_t i=0;
 
 	while(i<hash->cap){
-		if(hash->tabla[pos]->estado==VACIO || i+1==hash->cap) return dato;
+		if(hash->tabla[pos]->estado==VACIO) return dato;
 		if(hash->tabla[pos]->estado==OCUPADO && strcmp(hash->tabla[pos]->clave,clave)==0){
 			dato = hash->tabla[pos]->dato;
 			break;
 		}
-		pos++;
+		pos++,i++;
 	}
 	return dato;
 }
@@ -160,13 +210,14 @@ size_t hash_cantidad(const hash_t* hash){
 }
 
 void hash_destruir(hash_t* hash){
-	if(!hash_esta_vacio(hash)){
-		for(size_t i=0;i<hash->cap;i++){
+	for(size_t i=0;i<hash->cap;i++){
+		if(hash->destruir_dato){
 			if(hash->tabla[i]->estado==OCUPADO){
-				hash->destruir_dato((char*)hash->tabla[i]->clave);
+				free((char*)hash->tabla[i]->clave);
 				hash->destruir_dato(hash->tabla[i]->dato);
 			}
 		}
+		free(hash->tabla[i]);
 	}
 	free(hash->tabla);
 	free(hash);
@@ -176,15 +227,16 @@ hash_iter_t *hash_iter_crear(const hash_t *hash){
 	hash_iter_t* iter = malloc(sizeof(hash_iter_t));
 	if(!iter) return NULL;
 	iter->hash = hash;
-	//busco el primer ocupado
+	//hash vacio
+	size_t i=0;
 	if(iter->hash->cant==0){
 		iter->pos = hash->cap;
-		return iter;
 	}
-	for(size_t i=0;i<iter->hash->cap;i++){
-		if(iter->hash->tabla[i]->estado==OCUPADO){
-			iter->pos = i;
+	else{//busco el primer ocupado
+		while(iter->hash->tabla[i]->estado!=OCUPADO && i<iter->hash->cap){
+			i++;
 		}
+		iter->pos=i;
 	}
 	return iter;
 }
@@ -195,12 +247,12 @@ bool hash_iter_al_final(const hash_iter_t *iter){
 }
 
 bool hash_iter_avanzar(hash_iter_t *iter){
-	if(!hash_iter_al_final(iter)){
-		iter->pos+=1;
-		return true;
+	while(!hash_iter_al_final(iter)){
+		if(iter->hash->tabla[iter->pos++]->estado==OCUPADO) return true;
 	}
 	return false;
 }
+
 
 const char* hash_iter_ver_actual(const hash_iter_t* iter){
 	if(hash_iter_al_final(iter)) return NULL;
