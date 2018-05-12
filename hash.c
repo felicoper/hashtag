@@ -42,6 +42,10 @@ size_t jenkins_one_at_a_time_hash(const char* clave, size_t hash_cap) {
   return hash % hash_cap;
 }
 
+bool hash_esta_vacio(const hash_t* hash){
+	return hash->cant==0;
+}
+
 nodo_t* crear_nodo(){
 	nodo_t* nodo = malloc(sizeof(nodo_t));
 	if(!nodo) return NULL;
@@ -72,32 +76,38 @@ hash_t *hash_crear(hash_destruir_dato_t destruir_dato){
 	return hash;
 }
 
+
 bool hash_guardar(hash_t* hash, const char* clave, void *dato){
 	char* clave_aux = malloc(sizeof(char)*strlen(clave));
 	if (!clave_aux) return false;
+	strcpy(clave_aux,clave);
+
 	size_t pos=jenkins_one_at_a_time_hash(clave,hash->cap);
-	size_t i=0;
 	//me fijo si la clave existe
-	for(;i<hash->cap;i++){		//o(N)
-		if(hash->tabla[i]->estado==OCUPADO && hash->tabla[i]->clave == clave_aux){
-			hash->destruir_dato(hash->tabla[i]->dato);
-			hash->tabla[i]->dato = dato;
-			return true;
+	if(hash_pertenece(hash,clave)){
+		if(hash->destruir_dato){
+			hash->destruir_dato(hash->tabla[pos]->dato);
 		}
+		hash->tabla[pos]->dato=dato;
 	}
-	//si no busco el dato
-	while(pos<hash->cap){
-		if(hash->tabla[pos]->estado==VACIO){
-			hash->tabla[pos]->clave = clave_aux;
-			hash->tabla[pos]->dato = dato;
-			hash->tabla[pos]->estado = OCUPADO;
-			hash->cant ++;
+	else{
+		while(true){
+			if(hash->tabla[pos]->estado!=OCUPADO){
+				hash->tabla[pos]->estado = OCUPADO;
+				hash->tabla[pos]->clave = clave_aux;
+				hash->tabla[pos]->dato = dato;
+				hash->cant ++;
+				break;
+			}
+			else{
+				pos++;
+				if(pos+1==hash->cap) pos=0;
+			}
 		}
-		pos++;
-		if(pos+1==hash->cap) pos=0;
 	}
 	return true;
 }
+
 
 void *hash_borrar(hash_t *hash, const char *clave){
 	//mirar redimension
@@ -105,17 +115,18 @@ void *hash_borrar(hash_t *hash, const char *clave){
 	size_t pos=jenkins_one_at_a_time_hash(clave,hash->cap);
 	void* dato = NULL;
 	//busco la clave y me fijo si existe
-	int i=0;
-	while(pos<hash->cap){
+	size_t i=0;
+	while(hash->tabla[pos+i]!=VACIO){
 		if(i==hash->cap) return dato;
-		if(hash->tabla[pos]->estado==OCUPADO && hash->tabla[pos]->clave==clave){
-			dato = hash->tabla[pos]->dato;
-			free((char*)hash->tabla[pos]->clave);
+		if(strcmp(hash->tabla[pos+i]->clave,clave)==0){
+			dato=hash->tabla[pos]->dato;
+			hash->tabla[pos]->dato=NULL;
 			hash->tabla[pos]->estado=BORRADO;
 			hash->cant--;
 		}
 		else{
 			pos++,i++;
+			if(pos+1==hash->cap) pos=0;
 		}
 	}
 	return dato;
@@ -123,13 +134,15 @@ void *hash_borrar(hash_t *hash, const char *clave){
 
 
 void *hash_obtener(const hash_t *hash, const char *clave){
-	if(hash->cant==0) return NULL;
+	if(hash_esta_vacio(hash)) return NULL;
+
 	void* dato = NULL;
 	size_t pos = jenkins_one_at_a_time_hash(clave,hash->cap);
 	size_t i=0;
+
 	while(i<hash->cap){
 		if(hash->tabla[pos]->estado==VACIO || i+1==hash->cap) return dato;
-		if(hash->tabla[pos]->clave == clave){
+		if(hash->tabla[pos]->estado==OCUPADO && strcmp(hash->tabla[pos]->clave,clave)==0){
 			dato = hash->tabla[pos]->dato;
 			break;
 		}
@@ -147,7 +160,7 @@ size_t hash_cantidad(const hash_t* hash){
 }
 
 void hash_destruir(hash_t* hash){
-	if(hash->cant != 0){
+	if(!hash_esta_vacio(hash)){
 		for(size_t i=0;i<hash->cap;i++){
 			if(hash->tabla[i]->estado==OCUPADO){
 				hash->destruir_dato((char*)hash->tabla[i]->clave);
