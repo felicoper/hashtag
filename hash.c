@@ -72,14 +72,13 @@ bool resize_hash(hash_t* hash,size_t nuevo_tam){
 	//recorro el hash viejo buscando solo los ocupados y los rehasheo a la tabla nueva
 	for(size_t i=0;i<hash->cap;i++){
 		if(hash->tabla[i]->estado==OCUPADO){
-			const char* clave = strdup(hash->tabla[i]->clave);
-			size_t pos = jenkins_one_at_a_time_hash(clave,nuevo_tam);
+			size_t pos = jenkins_one_at_a_time_hash(hash->tabla[i]->clave,nuevo_tam);
 			//me fijo si la nueva posicion esta ocupada o no y guardo el elemento;
 			while(true){
 				if(pos+1==nuevo_tam) pos=0;
 				if(nueva_tabla[pos]->estado==VACIO){
 					nueva_tabla[pos]->estado=OCUPADO;
-					nueva_tabla[pos]->clave=clave;
+					nueva_tabla[pos]->clave=strdup(hash->tabla[i]->clave);
 					nueva_tabla[pos]->dato=hash->tabla[i]->dato;
 					break;
 				}
@@ -97,6 +96,8 @@ bool resize_hash(hash_t* hash,size_t nuevo_tam){
 	free(tabla_previa);
 	return true;
 }
+
+
 
 hash_t *hash_crear(hash_destruir_dato_t destruir_dato){
 	hash_t* hash = malloc(sizeof(hash_t));
@@ -183,24 +184,30 @@ void *hash_borrar(hash_t *hash, const char *clave){
 
 void *hash_obtener(const hash_t *hash, const char *clave){
 	if(hash_esta_vacio(hash)) return NULL;
-
-	void* dato = NULL;
+	void* dato=NULL;
 	size_t pos = jenkins_one_at_a_time_hash(clave,hash->cap);
-	size_t i=0;
-
-	while(i<hash->cap){
-		if(hash->tabla[pos]->estado==VACIO) return dato;
+	for(size_t i=0;i<hash->cap;i++){
+		if(pos+1==hash->cap) pos=0;
 		if(hash->tabla[pos]->estado==OCUPADO && strcmp(hash->tabla[pos]->clave,clave)==0){
-			dato = hash->tabla[pos]->dato;
-			break;
+			return dato=hash->tabla[pos]->dato;
 		}
-		pos++,i++;
+		pos++;
+
 	}
-	return dato;
+	return NULL;
 }
 
 bool hash_pertenece(const hash_t *hash,const char *clave){
-	return (hash_obtener(hash,clave)!=NULL);
+	bool encontro=false;
+	if(hash_esta_vacio(hash)) return encontro;
+	size_t pos = jenkins_one_at_a_time_hash(clave,hash->cap);
+	for(size_t i=0;i<hash->cap;i++){
+		if(pos+1==hash->cap) pos=0;
+		if(hash->tabla[pos]->estado==OCUPADO && strcmp(hash->tabla[pos]->clave,clave)==0){
+			return encontro = true;
+		}
+	}
+	return encontro;
 }
 
 size_t hash_cantidad(const hash_t* hash){
@@ -245,7 +252,6 @@ hash_iter_t *hash_iter_crear(const hash_t *hash){
 
 bool hash_iter_al_final(const hash_iter_t *iter){
 	return (iter->pos==iter->hash->cap);
-
 }
 
 bool hash_iter_avanzar(hash_iter_t *iter){
