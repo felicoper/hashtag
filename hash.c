@@ -233,38 +233,34 @@ hash_iter_t *hash_iter_crear(const hash_t *hash){
 	hash_iter_t* iter = malloc(sizeof(hash_iter_t));
 	if(!iter) return NULL;
 	iter->hash = hash;
-	//hash vacio
-	size_t i=0;
-	if(iter->hash->cant==0){
-		iter->pos = hash->cap;
+	size_t i = 0;
+	while (i < iter->hash->cap && iter->hash->tabla[i]->estado != OCUPADO){
+		i++;
 	}
-	while(i!=iter->hash->cap)
-		if(iter->hash->tabla[i]->estado==OCUPADO){
-			iter->pos=i;
-			break;
-		}
-		else{
-			i++;
-		}
+	iter->pos = i;
 	return iter;
 }
 
-
 bool hash_iter_al_final(const hash_iter_t *iter){
-	return (iter->pos==iter->hash->cap);
+	return (iter->pos == iter->hash->cap);
 }
 
 bool hash_iter_avanzar(hash_iter_t *iter){
-	while(!hash_iter_al_final(iter)){
-		if(iter->hash->tabla[iter->pos++]->estado==OCUPADO) return true;
+	if(!hash_iter_al_final(iter)){
+		size_t posicion = iter->pos + 1;
+		while(posicion < iter->hash->cap && iter->hash->tabla[posicion]->estado != OCUPADO){			
+			posicion++;
+		}
+		iter->pos = posicion;
+		return true;
 	}
 	return false;
 }
 
-
 const char* hash_iter_ver_actual(const hash_iter_t* iter){
-	if(hash_iter_al_final(iter)) return NULL;
-	return iter->hash->tabla[iter->pos]->clave;
+	if (hash_iter_al_final(iter)) return NULL;
+	char* actual = strdup(iter->hash->tabla[iter->pos]->clave);
+	return actual;
 }
 
 void hash_iter_destruir(hash_iter_t* iter){
